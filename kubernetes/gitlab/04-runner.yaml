@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-runner-scripts
+  namespace: gitlab
+data:
+  register-and-run.sh: |
+    #!/bin/sh
+    set -e
+
+    if [ -z "${CI_SERVER_URL}" ] || [ -z "${RUNNER_REGISTRATION_TOKEN}" ]; then
+      echo "CI_SERVER_URL and RUNNER_REGISTRATION_TOKEN must be set"
+      exit 1
+    fi
+
+    if [ ! -f /etc/gitlab-runner/config.toml ]; then
+      gitlab-runner register --non-interactive \
+        --url "${CI_SERVER_URL}" \
+        --registration-token "${RUNNER_REGISTRATION_TOKEN}" \
+        --executor "kubernetes" \
+        --kubernetes-namespace "${KUBERNETES_NAMESPACE}" \
+        --kubernetes-service-account "gitlab-runner" \
+        --kubernetes-image "alpine:3.20" \
+        --kubernetes-privileged=true \
+        --description "k8s-shared-runner" \
+        --tag-list "kubernetes,docker" \
+        --run-untagged=true \
+        --locked=false
+    fi
+
+    exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab-runner
+  namespace: gitlab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab-runner
+  template:
+    metadata:
+      labels:
+        app: gitlab-runner
+    spec:
+      serviceAccountName: gitlab-runner
+      containers:
+        - name: gitlab-runner
+          image: gitlab/gitlab-runner:alpine3.19-v17.2.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CI_SERVER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-runner-auth
+                  key: CI_SERVER_URL
+            - name: RUNNER_REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-runner-auth
+                  key: RUNNER_REGISTRATION_TOKEN
+            - name: KUBERNETES_NAMESPACE
+              value: gitlab
+          command: ["/bin/sh", "/config/register-and-run.sh"]
+          volumeMounts:
+            - name: runner-config
+              mountPath: /etc/gitlab-runner
+            - name: runner-scripts
+              mountPath: /config
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: runner-config
+          emptyDir: {}
+        - name: runner-scripts
+          configMap:
+            name: gitlab-runner-scripts
+            defaultMode: 0755

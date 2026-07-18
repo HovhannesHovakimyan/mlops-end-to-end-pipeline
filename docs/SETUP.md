@@ -14,6 +14,7 @@ Use local Python only for contributor workflows in `docs/DEVELOPMENT.md`.
 
 Execution modes:
 - **GitLab CI mode (recommended):** GitLab mirror runs `.gitlab-ci.yml` and handles image build/train/deploy.
+- **Self-managed GitLab mode:** Deploy GitLab CE + Runner in your cluster, then run `.gitlab-ci.yml` there.
 - **Manual sanity mode:** You build image and run Kubernetes Job yourself for quick validation.
 
 ### Cluster Requirements
@@ -159,6 +160,30 @@ Expected behavior:
 
 Portfolio note:
 This setup intentionally demonstrates cross-platform integration: GitHub for public collaboration and visibility, GitLab on-prem for enterprise CI/CD execution.
+
+#### Option B: Deploy Self-Managed GitLab + Runner in Your Cluster
+
+If you do not already have GitLab on-prem, deploy the bundled dev/lab manifests:
+
+```bash
+kubectl apply -f kubernetes/gitlab/01-namespace.yaml
+kubectl apply -f kubernetes/gitlab/02-gitlab.yaml
+kubectl wait --for=condition=available --timeout=900s deployment/gitlab -n gitlab
+```
+
+Then configure and deploy the runner:
+
+```bash
+# copy and edit the example with your registration token
+cp kubernetes/gitlab/05-runner-secret.example.yaml /tmp/gitlab-runner-secret.yaml
+kubectl apply -f /tmp/gitlab-runner-secret.yaml
+
+kubectl apply -f kubernetes/gitlab/03-runner-rbac.yaml
+kubectl apply -f kubernetes/gitlab/04-runner.yaml
+kubectl wait --for=condition=available --timeout=300s deployment/gitlab-runner -n gitlab
+```
+
+For complete details, see `docs/GITLAB_SELF_MANAGED.md`.
 
 ### Step 8: Build Docker Images
 
