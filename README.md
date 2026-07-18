@@ -55,7 +55,8 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
 - **Path B (manual in-cluster test run):**
     - Intended for local development/testing workflows.
     - Build training image yourself and run a one-off Kubernetes Job.
-    - Requires Python 3.11 installed locally if you also run training/tests outside the cluster.
+    - Building the Docker image does not require local Python (it uses `python:3.11-slim` in-container).
+    - Python 3.11 is only required if you run training/tests directly on your local machine.
     - Useful for quick validation without waiting for GitLab.
 
 ### Prerequisites

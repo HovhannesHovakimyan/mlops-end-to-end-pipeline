@@ -15,7 +15,7 @@ Use local Python only for contributor workflows in `docs/DEVELOPMENT.md`.
 Execution modes:
 - **GitLab CI mode (recommended, existing GitLab required):** Assumes your team already has GitLab and runners. GitLab mirror runs `.gitlab-ci.yml` and handles image build/train/deploy.
 - **Self-managed GitLab mode:** Deploy GitLab CE + Runner in your cluster, then run `.gitlab-ci.yml` there. All required CI infra is in-cluster; no local runtime setup is needed outside cluster access tooling.
-- **Manual in-cluster test mode:** Intended for local development/testing. You build image and run Kubernetes Job yourself for quick validation. If you run training/tests on your local machine, install Python 3.11.
+- **Manual in-cluster test mode:** Intended for local development/testing. You build image and run Kubernetes Job yourself for quick validation. Building the Docker image does not require local Python. Install Python 3.11 only if you run training/tests directly on your local machine.
 
 ### Cluster Requirements
 - **Minimum 3 nodes** with at least 16GB memory each
