@@ -9,6 +9,9 @@
 - **Helm** (optional): For easier package management
 - **Disk Space**: At least 100GB available for storage
 
+This setup guide is Kubernetes-first: local Python is not required to run the pipeline in-cluster.
+Use local Python only for contributor workflows in `docs/DEVELOPMENT.md`.
+
 ### Cluster Requirements
 - **Minimum 3 nodes** with at least 16GB memory each
 - **Network**: All nodes must communicate with each other

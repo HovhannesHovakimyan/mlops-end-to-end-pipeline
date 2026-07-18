@@ -41,19 +41,14 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
 
 ### Prerequisites
 - Kubernetes cluster (v1.24+) and `kubectl` connected
-- Python 3.11
-- Docker
+- Docker (only if you build images locally)
 - Git
 
-### 1. Clone and install dependencies
+### 1. Clone repository
 
 ```bash
 git clone https://github.com/HovhannesHovakimyan/mlops-end-to-end-pipeline.git
 cd mlops-end-to-end-pipeline
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r models/requirements.txt
-pip install pytest pytest-cov black flake8 mypy
 ```
 
 ### 2. Deploy infrastructure
@@ -74,44 +69,17 @@ kubectl exec -n minio deployment/minio -- mc mb -p local/model-registry
 kubectl exec -n minio deployment/minio -- mc mb -p local/mlflow-artifacts
 ```
 
-### 3. Port-forward and export environment
+### 3. Build training image (no local Python required)
 
 ```bash
-kubectl port-forward -n minio svc/minio 9000:9000 &
-kubectl port-forward -n minio svc/minio-console 9001:9001 &
-kubectl port-forward -n mlflow svc/mlflow 5000:5000 &
-
-export MLFLOW_TRACKING_URI=http://localhost:5000
-export MINIO_ENDPOINT=http://localhost:9000
-export AWS_ACCESS_KEY_ID=minioadmin
-export AWS_SECRET_ACCESS_KEY=minioadmin
-```
-
-### 4. Train model locally
-
-```bash
-source venv/bin/activate
-python pipelines/train_pipeline.py
-```
-
-### 5. Optional: deploy inference service to KServe
-
-```bash
-# install KServe if not already installed
-kubectl apply -f https://github.com/kserve/kserve/releases/download/v0.11.0/kserve.yaml
-
-kubectl apply -f kubernetes/04-kserve-inference-service.yaml
-kubectl get inferenceservice -n kserve
-```
-
-### 6. Verified Minikube sanity run (in-cluster)
-
-```bash
-# build training image into minikube docker daemon
-eval "$(minikube -p minikube-quickcheck docker-env)"
+# If using minikube, build directly into minikube's Docker daemon
+eval "$(minikube docker-env)"
 docker build -f docker/Dockerfile.training -t mlops-sanity-training:latest .
+```
 
-# run training as Kubernetes Job
+### 4. Run training in Kubernetes
+
+```bash
 kubectl delete job sanity-train -n default --ignore-not-found
 cat <<'YAML' | kubectl apply -f -
 apiVersion: batch/v1
@@ -147,6 +115,41 @@ YAML
 
 kubectl wait --for=condition=complete --timeout=600s job/sanity-train -n default
 kubectl logs job/sanity-train -n default --tail=120
+```
+
+### 5. Optional: port-forward for UI access
+
+```bash
+kubectl port-forward -n minio svc/minio 9000:9000 &
+kubectl port-forward -n minio svc/minio-console 9001:9001 &
+kubectl port-forward -n mlflow svc/mlflow 5000:5000 &
+
+export MLFLOW_TRACKING_URI=http://localhost:5000
+export MINIO_ENDPOINT=http://localhost:9000
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+```
+
+### 6. Optional local developer mode (requires Python 3.11)
+
+```bash
+python3.11 -m venv venv
+source venv/bin/activate
+pip install -r models/requirements.txt
+pip install pytest pytest-cov black flake8 mypy
+
+# run training locally
+python pipelines/train_pipeline.py
+```
+
+### 7. Optional: deploy inference service to KServe
+
+```bash
+# install KServe if not already installed
+kubectl apply -f https://github.com/kserve/kserve/releases/download/v0.11.0/kserve.yaml
+
+kubectl apply -f kubernetes/04-kserve-inference-service.yaml
+kubectl get inferenceservice -n kserve
 ```
 
 ## 📁 Project Structure

@@ -17,7 +17,10 @@ mlops-end-to-end-pipeline/
 
 ## Getting Started
 
-### 1. Clone and Setup Local Environment
+### 1. Clone and Setup Local Environment (Optional)
+
+Use this section only if you want to run code on your machine.
+If you run everything in Kubernetes, you can skip local Python setup.
 
 ```bash
 git clone https://github.com/HovhannesHovakimyan/mlops-end-to-end-pipeline.git
