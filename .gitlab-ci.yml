@@ -16,6 +16,9 @@ variables:
   MLFLOW_TRACKING_URI: "http://mlflow.mlflow:5000"
   MINIO_ENDPOINT: "http://minio.minio:9000"
   KUBERNETES_VERSION: "1.24"
+  # Opt-in controls for environment-specific jobs.
+  ENABLE_DEPLOY_JOBS: "false"
+  ENABLE_MONITOR_JOBS: "false"
 
 # ============================================================================
 # Build Stage: Build Docker images for training and serving
@@ -27,9 +30,14 @@ build:training:
   services:
     - docker:dind
   script:
-    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
     - docker build -f docker/Dockerfile.training -t $TRAINING_IMAGE .
-    - docker push $TRAINING_IMAGE
+    - |
+      if [ -n "$REGISTRY_USER" ] && [ -n "$REGISTRY_PASSWORD" ]; then
+        echo "$REGISTRY_PASSWORD" | docker login -u "$REGISTRY_USER" --password-stdin "$REGISTRY"
+        docker push "$TRAINING_IMAGE"
+      else
+        echo "REGISTRY_USER/REGISTRY_PASSWORD not set; skipping image push for local Path A2 run."
+      fi
   only:
     - main
     - /^release-.*$/
@@ -42,9 +50,14 @@ build:serving:
   services:
     - docker:dind
   script:
-    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
     - docker build -f docker/Dockerfile.serving -t $SERVING_IMAGE .
-    - docker push $SERVING_IMAGE
+    - |
+      if [ -n "$REGISTRY_USER" ] && [ -n "$REGISTRY_PASSWORD" ]; then
+        echo "$REGISTRY_PASSWORD" | docker login -u "$REGISTRY_USER" --password-stdin "$REGISTRY"
+        docker push "$SERVING_IMAGE"
+      else
+        echo "REGISTRY_USER/REGISTRY_PASSWORD not set; skipping image push for local Path A2 run."
+      fi
   only:
     - main
     - /^release-.*$/
@@ -57,9 +70,10 @@ build:serving:
 
 train:model:
   stage: train
-  image: $TRAINING_IMAGE
+  image: python:3.11-slim
   script:
     - echo "Starting model training..."
+    - pip install --no-cache-dir -r models/requirements.txt
     - python pipelines/train_pipeline.py
     - echo "Model training completed"
   artifacts:
@@ -82,9 +96,10 @@ train:model:
 
 test:model:
   stage: test
-  image: $TRAINING_IMAGE
+  image: python:3.11-slim
   script:
     - echo "Running model tests..."
+    - pip install --no-cache-dir -r models/requirements.txt pytest pytest-cov
     - pytest models/ -v --cov=models/ --cov-report=term
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
@@ -102,9 +117,10 @@ test:model:
 
 test:inference:
   stage: test
-  image: $SERVING_IMAGE
+  image: python:3.11-slim
   script:
     - echo "Testing inference service..."
+    - pip install --no-cache-dir -r models/requirements.txt pytest
     - python -m pytest models/test_predict.py -v
   only:
     - main
@@ -119,6 +135,10 @@ test:inference:
 deploy:kserve:
   stage: deploy
   image: bitnami/kubectl:latest
+  rules:
+    - if: '$ENABLE_DEPLOY_JOBS == "true"'
+      when: manual
+    - when: never
   script:
     - echo "Deploying model to KServe..."
     - kubectl config use-context $KUBE_CONTEXT
@@ -129,15 +149,16 @@ deploy:kserve:
     name: production
     kubernetes:
       namespace: kserve
-  only:
-    - main
   tags:
     - kubernetes
-  when: manual  # Manual approval for production deployment
 
 deploy:staging:
   stage: deploy
   image: bitnami/kubectl:latest
+  rules:
+    - if: '$ENABLE_DEPLOY_JOBS == "true"'
+      when: manual
+    - when: never
   script:
     - echo "Deploying model to staging environment..."
     - kubectl config use-context $KUBE_CONTEXT_STAGING
@@ -149,8 +170,6 @@ deploy:staging:
     name: staging
     kubernetes:
       namespace: kserve-staging
-  only:
-    - main
   tags:
     - kubernetes
 
@@ -161,6 +180,10 @@ deploy:staging:
 monitor:inference:
   stage: monitor
   image: curlimages/curl:latest
+  rules:
+    - if: '$ENABLE_MONITOR_JOBS == "true"'
+      when: on_success
+    - when: never
   script:
     - echo "Checking model inference service health..."
     - |
@@ -177,19 +200,20 @@ monitor:inference:
       exit 1
   environment:
     name: production
-  only:
-    - main
-  when: on_success
   tags:
     - kubernetes
 
 monitor:mlflow:
   stage: monitor
   image: curlimages/curl:latest
+  rules:
+    - if: '$ENABLE_MONITOR_JOBS == "true"'
+      when: on_success
+    - when: never
   script:
     - echo "Verifying MLflow tracking server..."
     - |
-      STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://mlflow.mlflow:5000/health)
+      STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://mlflow.mlflow:5000/)
       if [ $STATUS -eq 200 ] || [ $STATUS -eq 301 ]; then
         echo "✓ MLflow is accessible"
         exit 0
@@ -197,8 +221,6 @@ monitor:mlflow:
         echo "✗ MLflow health check failed (Status: $STATUS)"
         exit 1
       fi
-  only:
-    - main
   tags:
     - kubernetes
 
