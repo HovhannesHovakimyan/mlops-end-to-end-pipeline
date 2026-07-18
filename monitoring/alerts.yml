@@ -1,0 +1,108 @@
+# Prometheus alert rules for MLOps pipeline
+
+groups:
+  - name: model_serving
+    interval: 30s
+    rules:
+      # Alert if model service is down
+      - alert: ModelServiceDown
+        expr: up{job="kserve-metrics"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: model-serving
+        annotations:
+          summary: "Model service is down"
+          description: "KServe model service has been unavailable for more than 2 minutes"
+
+      # Alert if inference latency is high
+      - alert: HighInferenceLatency
+        expr: |
+          histogram_quantile(0.99,
+            rate(http_request_duration_seconds_bucket{job="kserve-metrics", le="+Inf"}[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: model-serving
+        annotations:
+          summary: "High inference latency detected"
+          description: "99th percentile latency is above 500ms"
+
+      # Alert if error rate is high
+      - alert: HighErrorRate
+        expr: |
+          rate(http_requests_total{job="kserve-metrics", status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: model-serving
+        annotations:
+          summary: "High error rate in inference"
+          description: "Error rate is above 5% in the last 5 minutes"
+
+  - name: mlflow_tracking
+    interval: 30s
+    rules:
+      # Alert if MLflow is down
+      - alert: MLflowServerDown
+        expr: up{job="mlflow"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: mlflow
+        annotations:
+          summary: "MLflow server is down"
+          description: "MLflow tracking server is unreachable"
+
+  - name: storage
+    interval: 30s
+    rules:
+      # Alert if MinIO is down
+      - alert: MinIODown
+        expr: up{job="minio"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: storage
+        annotations:
+          summary: "MinIO storage is down"
+          description: "MinIO S3-compatible storage is unreachable"
+
+      # Alert if storage usage is high
+      - alert: HighStorageUsage
+        expr: |
+          (minio_disk_storage_used_bytes / minio_disk_storage_total_bytes) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "High storage usage"
+          description: "Storage usage is above 85%"
+
+  - name: kubernetes
+    interval: 30s
+    rules:
+      # Alert if pod is in CrashLoopBackOff
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total{namespace=~"kserve|mlflow|minio"}[1h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: kubernetes
+        annotations:
+          summary: "Pod is crashing repeatedly"
+          description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is in CrashLoopBackOff"
+
+      # Alert if node is not ready
+      - alert: NodeNotReady
+        expr: kube_node_status_condition{condition="Ready", status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: kubernetes
+        annotations:
+          summary: "Kubernetes node is not ready"
+          description: "Node {{ $labels.node }} is not in ready state"

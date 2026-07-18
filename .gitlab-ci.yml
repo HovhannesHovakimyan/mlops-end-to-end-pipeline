@@ -1,0 +1,230 @@
+# GitLab CI/CD Pipeline for MLOps End-to-End Pipeline
+# Orchestrates data processing, model training, and deployment
+
+stages:
+  - build
+  - train
+  - test
+  - deploy
+  - monitor
+
+variables:
+  REGISTRY: "docker.io"  # Change to your registry
+  IMAGE_NAME: "mlops-pipeline"
+  TRAINING_IMAGE: "${REGISTRY}/${CI_PROJECT_NAMESPACE}/${IMAGE_NAME}:training-${CI_COMMIT_SHORT_SHA}"
+  SERVING_IMAGE: "${REGISTRY}/${CI_PROJECT_NAMESPACE}/${IMAGE_NAME}:serving-${CI_COMMIT_SHORT_SHA}"
+  MLFLOW_TRACKING_URI: "http://mlflow.mlflow:5000"
+  MINIO_ENDPOINT: "http://minio.minio:9000"
+  KUBERNETES_VERSION: "1.24"
+
+# ============================================================================
+# Build Stage: Build Docker images for training and serving
+# ============================================================================
+
+build:training:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
+    - docker build -f docker/Dockerfile.training -t $TRAINING_IMAGE .
+    - docker push $TRAINING_IMAGE
+  only:
+    - main
+    - /^release-.*$/
+  tags:
+    - docker
+
+build:serving:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
+    - docker build -f docker/Dockerfile.serving -t $SERVING_IMAGE .
+    - docker push $SERVING_IMAGE
+  only:
+    - main
+    - /^release-.*$/
+  tags:
+    - docker
+
+# ============================================================================
+# Train Stage: Execute ML training pipeline
+# ============================================================================
+
+train:model:
+  stage: train
+  image: $TRAINING_IMAGE
+  script:
+    - echo "Starting model training..."
+    - python pipelines/train_pipeline.py
+    - echo "Model training completed"
+  artifacts:
+    paths:
+      - mlruns/
+      - metrics.json
+    expire_in: 30 days
+  only:
+    - main
+    - schedules  # For scheduled retraining
+  tags:
+    - kubernetes
+  retry:
+    max: 2
+    when: script_failure
+
+# ============================================================================
+# Test Stage: Validate model performance
+# ============================================================================
+
+test:model:
+  stage: test
+  image: $TRAINING_IMAGE
+  script:
+    - echo "Running model tests..."
+    - pytest models/ -v --cov=models/ --cov-report=term
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - htmlcov/
+  only:
+    - main
+    - merge_requests
+  tags:
+    - kubernetes
+
+test:inference:
+  stage: test
+  image: $SERVING_IMAGE
+  script:
+    - echo "Testing inference service..."
+    - python -m pytest models/test_predict.py -v
+  only:
+    - main
+    - merge_requests
+  tags:
+    - kubernetes
+
+# ============================================================================
+# Deploy Stage: Deploy model to KServe
+# ============================================================================
+
+deploy:kserve:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - echo "Deploying model to KServe..."
+    - kubectl config use-context $KUBE_CONTEXT
+    - kubectl apply -f kubernetes/04-kserve-inference-service.yaml -n kserve
+    - echo "Waiting for deployment..."
+    - kubectl rollout status deployment/churn-predictor -n kserve --timeout=5m
+  environment:
+    name: production
+    kubernetes:
+      namespace: kserve
+  only:
+    - main
+  tags:
+    - kubernetes
+  when: manual  # Manual approval for production deployment
+
+deploy:staging:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - echo "Deploying model to staging environment..."
+    - kubectl config use-context $KUBE_CONTEXT_STAGING
+    - kubectl set image deployment/churn-predictor-staging \
+        predictor=$SERVING_IMAGE \
+        -n kserve-staging
+    - kubectl rollout status deployment/churn-predictor-staging -n kserve-staging --timeout=5m
+  environment:
+    name: staging
+    kubernetes:
+      namespace: kserve-staging
+  only:
+    - main
+  tags:
+    - kubernetes
+
+# ============================================================================
+# Monitor Stage: Health checks and metrics collection
+# ============================================================================
+
+monitor:inference:
+  stage: monitor
+  image: curlimages/curl:latest
+  script:
+    - echo "Checking model inference service health..."
+    - |
+      for i in {1..30}; do
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://churn-predictor.kserve/health)
+        if [ $STATUS -eq 200 ]; then
+          echo "✓ Service is healthy"
+          exit 0
+        fi
+        echo "Attempt $i/30: Waiting for service... (Status: $STATUS)"
+        sleep 10
+      done
+      echo "✗ Service failed to become healthy"
+      exit 1
+  environment:
+    name: production
+  only:
+    - main
+  when: on_success
+  tags:
+    - kubernetes
+
+monitor:mlflow:
+  stage: monitor
+  image: curlimages/curl:latest
+  script:
+    - echo "Verifying MLflow tracking server..."
+    - |
+      STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://mlflow.mlflow:5000/health)
+      if [ $STATUS -eq 200 ] || [ $STATUS -eq 301 ]; then
+        echo "✓ MLflow is accessible"
+        exit 0
+      else
+        echo "✗ MLflow health check failed (Status: $STATUS)"
+        exit 1
+      fi
+  only:
+    - main
+  tags:
+    - kubernetes
+
+# ============================================================================
+# Scheduled Jobs
+# ============================================================================
+
+scheduled:retrain:
+  stage: train
+  script:
+    - echo "Executing scheduled retraining..."
+    - python pipelines/train_pipeline.py
+  only:
+    - schedules
+  tags:
+    - kubernetes
+
+scheduled:cleanup:
+  stage: monitor
+  script:
+    - echo "Cleaning up old artifacts..."
+    - |
+      THRESHOLD=$(date -d '30 days ago' +%s)
+      # Remove old MLflow runs and artifacts
+      echo "Cleanup job completed"
+  only:
+    - schedules
+  tags:
+    - kubernetes

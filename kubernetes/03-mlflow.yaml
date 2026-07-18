@@ -1,0 +1,103 @@
+# MLflow PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-pvc
+  namespace: mlflow
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+# MLflow ConfigMap for configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlflow-config
+  namespace: mlflow
+data:
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"
+  MLFLOW_BACKEND_STORE_URI: "sqlite:////var/lib/mlflow/mlflow.db"
+  MLFLOW_DEFAULT_ARTIFACT_ROOT: "s3://mlflow-artifacts"
+---
+# MLflow Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+      - name: mlflow
+        image: python:3.11-slim
+        command:
+          - /bin/bash
+          - -c
+          - |
+            pip install -q mlflow boto3 &&
+            mlflow server \
+              --backend-store-uri sqlite:////var/lib/mlflow/mlflow.db \
+              --default-artifact-root s3://mlflow-artifacts \
+              --host 0.0.0.0 \
+              --port 5000
+        ports:
+        - containerPort: 5000
+          name: mlflow
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          value: "minioadmin"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "minioadmin"
+        - name: AWS_S3_ENDPOINT_URL
+          value: "http://minio.minio:9000"
+        volumeMounts:
+        - name: mlflow-data
+          mountPath: /var/lib/mlflow
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: mlflow-data
+        persistentVolumeClaim:
+          claimName: mlflow-pvc
+---
+# MLflow Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: mlflow
+spec:
+  selector:
+    app: mlflow
+  ports:
+  - port: 5000
+    targetPort: 5000
+  type: ClusterIP

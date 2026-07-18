@@ -1,0 +1,52 @@
+# KServe InferenceService for model serving
+# This deploys a trained model for inference with canary rollout strategy
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: churn-predictor
+  namespace: kserve
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: sklearn
+      storageUri: s3://model-registry/churn-model/latest/model.pkl
+      # Resources for predictor
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "512Mi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
+  # Canary deployment: 90% current, 10% candidate
+  canaryTrafficPercent: 10
+---
+# Service for KServe predictor
+apiVersion: v1
+kind: Service
+metadata:
+  name: kserve-predictor
+  namespace: kserve
+spec:
+  selector:
+    serving.kserve.io/service: churn-predictor
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+# ServiceMonitor for Prometheus metrics collection from KServe
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kserve-metrics
+  namespace: kserve
+spec:
+  selector:
+    matchLabels:
+      serving.kserve.io/service: churn-predictor
+  endpoints:
+  - port: metrics
+    interval: 30s

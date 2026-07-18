@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy requirements
+COPY models/requirements.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy pipeline code
+COPY pipelines/ ./pipelines/
+COPY models/ ./models/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV MLFLOW_TRACKING_URI=http://mlflow.mlflow:5000
+ENV MINIO_ENDPOINT=http://minio.minio:9000
+ENV AWS_ACCESS_KEY_ID=minioadmin
+ENV AWS_SECRET_ACCESS_KEY=minioadmin
+
+# Run training pipeline
+ENTRYPOINT ["python", "-u", "pipelines/train_pipeline.py"]
