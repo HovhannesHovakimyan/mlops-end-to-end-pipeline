@@ -136,6 +136,8 @@ train:model:
 test:model:
   stage: test
   image: python:3.11-slim
+  variables:
+    PYTHONPATH: "$CI_PROJECT_DIR"
   script:
     - echo "Running model tests..."
     - pip install --no-cache-dir -r models/requirements.txt pytest pytest-cov
@@ -157,10 +159,12 @@ test:model:
 test:inference:
   stage: test
   image: python:3.11-slim
+  variables:
+    PYTHONPATH: "$CI_PROJECT_DIR"
   script:
     - echo "Testing inference service..."
     - pip install --no-cache-dir -r models/requirements.txt pytest
-    - python -m pytest models/test_predict.py -v
+    - python -m pytest models/test_pipeline.py -v -k "Inference"
   only:
     - main
     - merge_requests
