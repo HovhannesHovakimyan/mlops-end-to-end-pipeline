@@ -83,6 +83,12 @@ build:serving:
 train:model:
   stage: train
   image: python:3.11-slim
+  variables:
+    AWS_ACCESS_KEY_ID: "minioadmin"
+    AWS_SECRET_ACCESS_KEY: "minioadmin"
+    AWS_DEFAULT_REGION: "us-east-1"
+    MLFLOW_S3_ENDPOINT_URL: "http://minio.minio:9000"
+    AWS_S3_ENDPOINT_URL: "http://minio.minio:9000"
   script:
     - echo "Starting model training..."
     - pip install --no-cache-dir -r models/requirements.txt
