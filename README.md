@@ -50,7 +50,7 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
     - Deploy GitLab CE + GitLab Runner from `kubernetes/gitlab/` manifests.
     - Then use the same `.gitlab-ci.yml` CI flow as Path A.
     - See `docs/GITLAB_SELF_MANAGED.md`.
-- **Path B (manual local sanity run):**
+- **Path B (manual in-cluster test run):**
     - Build training image yourself and run a one-off Kubernetes Job.
     - Useful for quick validation without waiting for GitLab.
 
