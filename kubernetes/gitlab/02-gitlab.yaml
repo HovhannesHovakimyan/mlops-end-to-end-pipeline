@@ -41,6 +41,9 @@ metadata:
   namespace: gitlab
 spec:
   replicas: 1
+  progressDeadlineSeconds: 1800
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: gitlab
@@ -59,7 +62,7 @@ spec:
                 external_url 'http://gitlab.gitlab.svc.cluster.local'
                 gitlab_rails['initial_root_password'] = 'ChangeMeImmediately!'
                 puma['worker_processes'] = 0
-                sidekiq['max_concurrency'] = 10
+                sidekiq['concurrency'] = 5
                 prometheus_monitoring['enable'] = false
                 nginx['listen_port'] = 80
                 gitlab_shell_ssh_port = 2222
@@ -68,29 +71,43 @@ spec:
               name: http
             - containerPort: 22
               name: ssh
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -lc
+                - /opt/gitlab/embedded/bin/curl -fsS http://127.0.0.1:80/-/liveness > /dev/null
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 90
           readinessProbe:
-            httpGet:
-              path: /-/readiness
-              port: 80
-            initialDelaySeconds: 180
+            exec:
+              command:
+                - /bin/sh
+                - -lc
+                - /opt/gitlab/embedded/bin/curl -fsS http://127.0.0.1:80/-/readiness > /dev/null
+            initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 10
           livenessProbe:
-            httpGet:
-              path: /-/liveness
-              port: 80
-            initialDelaySeconds: 240
+            exec:
+              command:
+                - /bin/sh
+                - -lc
+                - /opt/gitlab/embedded/bin/curl -fsS http://127.0.0.1:80/-/liveness > /dev/null
+            initialDelaySeconds: 60
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 10
           resources:
             requests:
-              cpu: "1000m"
-              memory: "4Gi"
+              cpu: "750m"
+              memory: "3Gi"
             limits:
               cpu: "2000m"
-              memory: "6Gi"
+              memory: "5Gi"
           volumeMounts:
             - name: config
               mountPath: /etc/gitlab
