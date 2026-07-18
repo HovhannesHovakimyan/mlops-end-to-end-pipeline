@@ -15,11 +15,11 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
 ┌─────────────────────────────────────────────────────────────────┐
 │              Kubernetes Cluster (On-Premises)                   │
 ├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │   MinIO      │  │   MLflow     │  │   KServe     │          │
-│  │   (S3-like)  │  │  (Tracking)  │  │  (Serving)   │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│         ↑                  ↑                 ↑                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
+│  │   MinIO      │  │   MLflow     │  │   KServe     │           │
+│  │   (S3-like)  │  │  (Tracking)  │  │  (Serving)   │           │
+│  └──────────────┘  └──────────────┘  └──────────────┘           │
+│         ↑                  ↑                 ↑                  │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │      Training Pipeline (GitLab Runner on K8s)            │   │
 │  │  - Data Ingestion → Feature Engineering → Training       │   │
@@ -27,7 +27,7 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
 │  │  - Model Versioning (MinIO)                              │   │
 │  │  - Auto Deployment to KServe                             │   │
 │  └──────────────────────────────────────────────────────────┘   │
-│         ↑                                                        │
+│         ↑                                                       │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │      Monitoring & Retraining Triggers                    │   │
 │  │  - Prometheus (Metrics)                                  │   │
