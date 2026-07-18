@@ -13,7 +13,7 @@ This setup guide is Kubernetes-first: local Python is not required to run the pi
 Use local Python only for contributor workflows in `docs/DEVELOPMENT.md`.
 
 Execution modes:
-- **GitLab CI mode (recommended):** GitLab mirror runs `.gitlab-ci.yml` and handles image build/train/deploy.
+- **GitLab CI mode (recommended, existing GitLab required):** Assumes your team already has GitLab and runners. GitLab mirror runs `.gitlab-ci.yml` and handles image build/train/deploy.
 - **Self-managed GitLab mode:** Deploy GitLab CE + Runner in your cluster, then run `.gitlab-ci.yml` there.
 - **Manual sanity mode:** You build image and run Kubernetes Job yourself for quick validation.
 

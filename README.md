@@ -41,8 +41,9 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
 
 ### Choose Your Execution Path
 
-- **Path A (recommended for teams): GitLab CI/CD**
+- **Path A (recommended for teams with existing GitLab): GitLab CI/CD**
     - Push code to GitHub.
+    - Assumes your team already has a running GitLab instance and configured runners.
     - GitLab mirror triggers pipeline and builds/runs in Kubernetes.
     - You can skip manual image build and manual training job steps.
 - **Path A2 (self-managed GitLab in your cluster):**
@@ -83,7 +84,7 @@ kubectl exec -n minio deployment/minio -- mc mb -p local/model-registry
 kubectl exec -n minio deployment/minio -- mc mb -p local/mlflow-artifacts
 ```
 
-If you use **Path A (GitLab CI/CD)**, continue with GitLab mirror/pipeline setup and skip to optional UI or inference steps.
+If you use **Path A (existing GitLab CI/CD)**, continue with GitLab mirror/pipeline setup and skip to optional UI or inference steps.
 If you use **Path A2 (self-managed GitLab)**, follow `docs/GITLAB_SELF_MANAGED.md`.
 
 ### 3. Build training image (no local Python required)
