@@ -12,6 +12,10 @@
 This setup guide is Kubernetes-first: local Python is not required to run the pipeline in-cluster.
 Use local Python only for contributor workflows in `docs/DEVELOPMENT.md`.
 
+Execution modes:
+- **GitLab CI mode (recommended):** GitLab mirror runs `.gitlab-ci.yml` and handles image build/train/deploy.
+- **Manual sanity mode:** You build image and run Kubernetes Job yourself for quick validation.
+
 ### Cluster Requirements
 - **Minimum 3 nodes** with at least 16GB memory each
 - **Network**: All nodes must communicate with each other

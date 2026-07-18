@@ -39,6 +39,16 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
 
 ## 🚀 Quick Start
 
+### Choose Your Execution Path
+
+- **Path A (recommended for teams): GitLab CI/CD**
+    - Push code to GitHub.
+    - GitLab mirror triggers pipeline and builds/runs in Kubernetes.
+    - You can skip manual image build and manual training job steps.
+- **Path B (manual local sanity run):**
+    - Build training image yourself and run a one-off Kubernetes Job.
+    - Useful for quick validation without waiting for GitLab.
+
 ### Prerequisites
 - Kubernetes cluster (v1.24+) and `kubectl` connected
 - Docker (only if you build images locally)
@@ -69,7 +79,11 @@ kubectl exec -n minio deployment/minio -- mc mb -p local/model-registry
 kubectl exec -n minio deployment/minio -- mc mb -p local/mlflow-artifacts
 ```
 
+If you use **Path A (GitLab CI/CD)**, continue with GitLab mirror/pipeline setup and skip to optional UI or inference steps.
+
 ### 3. Build training image (no local Python required)
+
+Path B only.
 
 ```bash
 # If using minikube, build directly into minikube's Docker daemon
@@ -78,6 +92,8 @@ docker build -f docker/Dockerfile.training -t mlops-sanity-training:latest .
 ```
 
 ### 4. Run training in Kubernetes
+
+Path B only.
 
 ```bash
 kubectl delete job sanity-train -n default --ignore-not-found
