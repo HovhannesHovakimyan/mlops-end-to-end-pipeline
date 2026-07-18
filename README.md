@@ -48,6 +48,8 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
     - You can skip manual image build and manual training job steps.
 - **Path A2 (self-managed GitLab in your cluster):**
     - Deploy GitLab CE + GitLab Runner from `kubernetes/gitlab/` manifests.
+    - All required CI infrastructure for this path runs inside the Kubernetes cluster.
+    - No local runtime setup is required outside cluster tooling (`kubectl`/cluster access).
     - Then use the same `.gitlab-ci.yml` CI flow as Path A.
     - See `docs/GITLAB_SELF_MANAGED.md`.
 - **Path B (manual in-cluster test run):**

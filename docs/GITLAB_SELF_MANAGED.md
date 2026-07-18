@@ -8,6 +8,7 @@ It is suitable for demos and local testing of this repository's `.gitlab-ci.yml`
 - In-cluster GitLab CE service (`namespace: gitlab`)
 - In-cluster GitLab Runner (Kubernetes executor)
 - Runner tags compatible with this project (`kubernetes`, `docker`)
+- Cluster-contained CI infrastructure for this path (no local runtime installation required beyond `kubectl` and cluster access)
 
 ## Important Notes
 
