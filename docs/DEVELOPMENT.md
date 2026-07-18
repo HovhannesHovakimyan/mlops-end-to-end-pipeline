@@ -20,7 +20,7 @@ mlops-end-to-end-pipeline/
 ### 1. Clone and Setup Local Environment
 
 ```bash
-git clone https://github.com/your-org/mlops-end-to-end-pipeline.git
+git clone https://github.com/HovhannesHovakimyan/mlops-end-to-end-pipeline.git
 cd mlops-end-to-end-pipeline
 
 # Create virtual environment
@@ -45,11 +45,17 @@ export MINIO_ENDPOINT=http://localhost:9000
 export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
 
-# Start MinIO locally (if using Docker)
-docker run -p 9000:9000 -p 9001:9001 minio/minio server /data
+# Deploy infra in Kubernetes (recommended)
+kubectl apply -f kubernetes/01-namespaces.yaml
+kubectl apply -f kubernetes/02-minio.yaml
+kubectl apply -f kubernetes/03-mlflow.yaml
+kubectl wait --for=condition=available --timeout=300s deployment/minio -n minio
+kubectl wait --for=condition=available --timeout=300s deployment/mlflow -n mlflow
 
-# Start MLflow locally
-mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns
+# Port-forward services
+kubectl port-forward -n minio svc/minio 9000:9000 &
+kubectl port-forward -n minio svc/minio-console 9001:9001 &
+kubectl port-forward -n mlflow svc/mlflow 5000:5000 &
 
 # Run training pipeline
 python pipelines/train_pipeline.py
@@ -58,7 +64,10 @@ python pipelines/train_pipeline.py
 #### Model Inference Development
 
 ```bash
-# Start Flask development server
+# Stop MLflow port-forward first because inference also uses port 5000
+pkill -f "port-forward -n mlflow svc/mlflow 5000:5000" || true
+
+# Start Flask inference server
 python models/predict.py
 
 # In another terminal, test inference
@@ -81,9 +90,6 @@ curl -X POST http://localhost:5000/predict \
 ```bash
 # Format code with Black
 black pipelines/ models/ --line-length 100
-
-# Sort imports
-isort pipelines/ models/
 ```
 
 #### Linting
@@ -105,8 +111,8 @@ pytest models/ -v
 # Run with coverage
 pytest models/ --cov=models/ --cov-report=html
 
-# Run specific test
-pytest models/test_model.py::test_train_model -v
+# Run the main test module explicitly
+pytest models/test_pipeline.py -v
 ```
 
 ## Git Workflow

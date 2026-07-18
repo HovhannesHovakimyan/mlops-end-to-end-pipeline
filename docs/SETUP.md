@@ -5,7 +5,7 @@
 - **Kubernetes Cluster**: v1.24+ on-premises
 - **kubectl**: Configured and connected to your cluster
 - **Docker**: v20.10+ for building images
-- **GitHub**: Repository with Actions enabled
+- **GitHub**: Repository access (source of truth)
 - **Helm** (optional): For easier package management
 - **Disk Space**: At least 100GB available for storage
 
@@ -19,7 +19,7 @@
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/your-org/mlops-end-to-end-pipeline.git
+git clone https://github.com/HovhannesHovakimyan/mlops-end-to-end-pipeline.git
 cd mlops-end-to-end-pipeline
 ```
 
@@ -200,7 +200,7 @@ REGISTRY_PASSWORD=your-password
 git init
 git add .
 git commit -m "Initial commit: MLOps end-to-end pipeline"
-git remote add origin https://github.com/your-org/mlops-end-to-end-pipeline.git
+git remote add origin https://github.com/HovhannesHovakimyan/mlops-end-to-end-pipeline.git
 git branch -M main
 git push -u origin main
 ```
@@ -227,16 +227,46 @@ kubectl port-forward -n mlflow svc/mlflow 5000:5000 &
 ### Test Training Pipeline
 
 ```bash
-# Run training job manually
-kubectl create job test-training \
-  --image=your-registry/mlops-pipeline:training-latest \
-  -n default
+# Build image into minikube docker daemon
+eval "$(minikube -p minikube-quickcheck docker-env)"
+docker build -f docker/Dockerfile.training -t mlops-sanity-training:latest .
 
-# Monitor job progress
-kubectl logs -f job/test-training
+# Run in-cluster training job
+kubectl delete job sanity-train -n default --ignore-not-found
+cat <<'YAML' | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sanity-train
+  namespace: default
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: trainer
+        image: mlops-sanity-training:latest
+        imagePullPolicy: Never
+        env:
+        - name: MLFLOW_TRACKING_URI
+          value: http://mlflow.mlflow:5000
+        - name: MINIO_ENDPOINT
+          value: http://minio.minio:9000
+        - name: AWS_ACCESS_KEY_ID
+          value: minioadmin
+        - name: AWS_SECRET_ACCESS_KEY
+          value: minioadmin
+        - name: AWS_S3_ENDPOINT_URL
+          value: http://minio.minio:9000
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: http://minio.minio:9000
+        - name: AWS_DEFAULT_REGION
+          value: us-east-1
+YAML
 
-# Check if model was registered in MLflow
-curl http://localhost:5000/api/2.0/registered-models
+kubectl wait --for=condition=complete --timeout=600s job/sanity-train -n default
+kubectl logs job/sanity-train -n default --tail=120
 ```
 
 ### Test Inference Service

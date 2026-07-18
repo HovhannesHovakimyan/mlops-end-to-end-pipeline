@@ -50,6 +50,8 @@ spec:
               --backend-store-uri sqlite:////var/lib/mlflow/mlflow.db \
               --default-artifact-root s3://mlflow-artifacts \
               --host 0.0.0.0 \
+              --allowed-hosts '*' \
+              --workers 1 \
               --port 5000
         ports:
         - containerPort: 5000
@@ -61,6 +63,10 @@ spec:
           value: "minioadmin"
         - name: AWS_S3_ENDPOINT_URL
           value: "http://minio.minio:9000"
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: "http://minio.minio:9000"
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
         volumeMounts:
         - name: mlflow-data
           mountPath: /var/lib/mlflow
@@ -71,16 +77,31 @@ spec:
           limits:
             memory: "2Gi"
             cpu: "2000m"
+        startupProbe:
+          httpGet:
+            path: /
+            port: 5000
+            httpHeaders:
+            - name: Host
+              value: mlflow.mlflow
+          failureThreshold: 60
+          periodSeconds: 5
         livenessProbe:
           httpGet:
             path: /
             port: 5000
-          initialDelaySeconds: 30
-          periodSeconds: 10
+            httpHeaders:
+            - name: Host
+              value: mlflow.mlflow
+          initialDelaySeconds: 10
+          periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /
             port: 5000
+            httpHeaders:
+            - name: Host
+              value: mlflow.mlflow
           initialDelaySeconds: 10
           periodSeconds: 5
       volumes:
