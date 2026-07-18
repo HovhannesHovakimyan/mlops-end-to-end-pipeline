@@ -40,17 +40,15 @@ spec:
     spec:
       containers:
       - name: mlflow
-        image: python:3.11-slim
+        image: ghcr.io/mlflow/mlflow:v2.14.3
         command:
-          - /bin/bash
+          - /bin/sh
           - -c
           - |
-            pip install -q mlflow boto3 &&
             mlflow server \
               --backend-store-uri sqlite:////var/lib/mlflow/mlflow.db \
               --default-artifact-root s3://mlflow-artifacts \
               --host 0.0.0.0 \
-              --allowed-hosts '*' \
               --workers 1 \
               --port 5000
         ports:
