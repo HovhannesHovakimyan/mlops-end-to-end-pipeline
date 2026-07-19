@@ -1,8 +1,58 @@
 # End-to-End MLOps Pipeline with Kubernetes
 
+<a id="executive-summary"></a>
+## Executive Summary
+
+This project provides a practical blueprint for running machine learning in production, not just in experiments. It combines training, testing, deployment, and monitoring into one repeatable workflow on Kubernetes.
+
+Why it matters:
+
+- Reduces risk when promoting models from development to production.
+- Improves delivery speed by automating build, train, test, and release steps.
+- Increases traceability with model versioning, experiment tracking, and artifacts.
+- Supports self-managed environments where teams need operational control.
+
+Bottom line: if your team needs a credible, end-to-end MLOps reference that can be adapted to real workloads, this project is a strong starting point.
+
 A production-grade MLOps platform demonstrating complete ML lifecycle management on-premises using Kubernetes, MLflow, KServe, MinIO, GitHub (repository), and GitLab (on-prem CI/CD).
 
 This hybrid setup is intentional for portfolio impact: it showcases practical integration across diverse products (GitHub for collaboration and visibility, GitLab on-prem for enterprise CI/CD execution).
+
+<a id="project-in-plain-english"></a>
+## Project In Plain English
+
+This project is a reusable template for teams that want to move an AI model from notebook experimentation into a reliable service that can be trained, tested, deployed, and monitored in a controlled way.
+
+What problem it solves:
+
+- Many AI projects work in demos but fail in production because training, deployment, and monitoring are disconnected.
+- Teams struggle to reproduce results, track model versions, and safely roll out model updates.
+- Manual operations increase delivery time and operational risk.
+
+What you get from this project:
+
+- A repeatable model lifecycle: train, validate, deploy, and monitor.
+- Better governance: model history, metrics, and artifacts are tracked.
+- Faster delivery: CI/CD automates common operational steps.
+- Lower rollout risk: health checks and monitoring catch problems earlier.
+
+Who should use it:
+
+- Platform teams standardizing ML operations.
+- ML engineers who need production-grade workflows.
+- Organizations that prefer Kubernetes-based, self-managed environments.
+
+When this project may not be the right fit:
+
+- You need a fully managed cloud-only MLOps stack with minimal infrastructure ownership.
+- Your use case is a lightweight prototype with no deployment or monitoring requirements.
+
+Decision checklist:
+
+- You want repeatable and auditable ML releases.
+- You are comfortable operating Kubernetes.
+- You need integration between source control, CI/CD, model tracking, and serving.
+- You want a practical reference architecture you can adapt to your own workloads.
 
 ## 🎯 Architecture Overview
 
@@ -39,6 +89,17 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
 
 ## 🚀 Quick Start
 
+Quick links:
+
+- [Executive summary](#executive-summary)
+- [Project in plain English](#project-in-plain-english)
+- [Choose your execution path](#choose-execution-path)
+- [Deploy infrastructure](#deploy-infrastructure)
+- [Run training in Kubernetes](#run-training-in-kubernetes)
+- [Deploy and monitoring jobs in GitLab CI](#deploy-monitoring-jobs)
+- [Teardown guide](docs/TEARDOWN.md)
+
+<a id="choose-execution-path"></a>
 ### Choose Your Execution Path
 
 - **Path A (recommended for teams with existing GitLab): GitLab CI/CD**
@@ -51,6 +112,7 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
     - All required CI infrastructure for this path runs inside the Kubernetes cluster.
     - No local runtime setup is required outside cluster tooling (`kubectl`/cluster access).
     - Then use the same `.gitlab-ci.yml` CI flow as Path A.
+    - For deploy/monitor CI guidance, see [Section 8](#deploy-monitoring-jobs).
     - See `docs/GITLAB_SELF_MANAGED.md`.
     - For cleanup, follow `docs/TEARDOWN.md`.
 - **Path B (manual in-cluster test run):**
@@ -72,7 +134,38 @@ git clone https://github.com/HovhannesHovakimyan/mlops-end-to-end-pipeline.git
 cd mlops-end-to-end-pipeline
 ```
 
+<a id="deploy-infrastructure"></a>
 ### 2. Deploy infrastructure
+
+Create or start your Kubernetes cluster before applying manifests. In this guide, we use Minikube.
+
+Recommended Minikube cluster parameters for this project:
+
+- Path B (manual run):
+
+```bash
+minikube start -p mlops-e2e --driver=docker --cpus=2 --memory=4096 --disk-size=20g
+```
+
+- Path A2 (self-managed GitLab + runner in cluster):
+
+```bash
+minikube start -p mlops-e2e --driver=docker --cpus=4 --memory=8192 --disk-size=40g
+```
+
+- Heavier setup (if deploy/monitor jobs are enabled, see [Deploy and monitoring jobs in GitLab CI](#deploy-monitoring-jobs)):
+
+```bash
+minikube start -p mlops-e2e --driver=docker --cpus=6 --memory=12288 --disk-size=50g
+```
+
+Quick preflight before applying manifests:
+
+```bash
+kubectl config current-context
+kubectl cluster-info
+kubectl get nodes
+```
 
 ```bash
 kubectl apply -f kubernetes/01-namespaces.yaml
@@ -103,6 +196,7 @@ eval "$(minikube docker-env)"
 docker build -f docker/Dockerfile.training -t mlops-sanity-training:latest .
 ```
 
+<a id="run-training-in-kubernetes"></a>
 ### 4. Run training in Kubernetes
 
 Path B only.
@@ -178,6 +272,48 @@ kubectl apply -f https://github.com/kserve/kserve/releases/download/v0.11.0/kser
 
 kubectl apply -f kubernetes/04-kserve-inference-service.yaml
 kubectl get inferenceservice -n kserve
+```
+
+<a id="deploy-monitoring-jobs"></a>
+### 8. Deploy and monitoring jobs in GitLab CI (optional)
+
+By default, deploy and monitor jobs are disabled in `.gitlab-ci.yml`:
+
+- `ENABLE_DEPLOY_JOBS="false"`
+- `ENABLE_MONITOR_JOBS="false"`
+
+Enable them only when your cluster and CI environment are ready.
+
+Prerequisites:
+
+- KServe CRDs installed and `kserve` namespace available
+- GitLab runner has Kubernetes access for deploy/monitor stages
+- CI variable `KUBE_CONTEXT` is set for production deploy job
+- CI variable `KUBE_CONTEXT_STAGING` is set for staging deploy job
+- In-cluster DNS/network paths are reachable:
+    - `http://churn-predictor.kserve/health`
+    - `http://mlflow.mlflow:5000/`
+
+How to enable:
+
+1. Open GitLab project CI/CD variables.
+2. Set `ENABLE_DEPLOY_JOBS` to `true`.
+3. Set `ENABLE_MONITOR_JOBS` to `true`.
+4. Ensure `KUBE_CONTEXT` and `KUBE_CONTEXT_STAGING` are present and valid.
+5. Run a pipeline on `main`.
+
+Expected behavior:
+
+- `deploy:kserve` and `deploy:staging` appear as manual jobs.
+- After deploy jobs run, `monitor:inference` and `monitor:mlflow` run automatically.
+- Successful monitor jobs confirm service health endpoints are reachable from the runner.
+
+Quick verification commands:
+
+```bash
+kubectl get inferenceservice -n kserve
+kubectl get pods -n kserve
+kubectl get svc -n mlflow
 ```
 
 ## 📁 Project Structure
