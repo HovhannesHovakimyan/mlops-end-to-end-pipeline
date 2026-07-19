@@ -1,7 +1,7 @@
 # Makefile for MLOps Pipeline
 
-.PHONY: help setup-local setup-k8s train test lint format clean \
-        docker-build docker-push port-forward logs verify
+.PHONY: help setup-local setup-k8s train test lint format clean teardown-path-a2 \
+	docker-build docker-push port-forward logs verify
 
 help:
 	@echo "MLOps End-to-End Pipeline - Available Commands"
@@ -29,6 +29,7 @@ help:
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean            - Remove temporary files"
+	@echo "  make teardown-path-a2 - Delete k8s manifests and Minikube cluster profile path-a2-test"
 	@echo ""
 
 # Setup local development environment
@@ -144,3 +145,16 @@ clean:
 	@rm -rf .pytest_cache htmlcov .coverage
 	@rm -rf mlruns artifacts
 	@echo "✓ Cleanup complete"
+
+# Full Path A2 teardown: remove project manifests and optional local Minikube cluster profile
+teardown-path-a2:
+	@echo "Deleting Kubernetes manifests from kubernetes/..."
+	@find kubernetes -type f \( -name '*.yaml' -o -name '*.yml' \) | sort -r | while read -r f; do \
+		echo "Deleting $$f"; \
+		kubectl delete -f "$$f" --ignore-not-found || true; \
+	done
+	@echo "Deleting namespace leftovers..."
+	@kubectl delete ns gitlab minio mlflow kserve --ignore-not-found || true
+	@echo "Deleting Minikube cluster profile path-a2-test (if present)..."
+	@minikube delete -p path-a2-test || true
+	@echo "✓ Path A2 teardown complete (Minikube installation is not removed)"

@@ -52,6 +52,7 @@ This hybrid setup is intentional for portfolio impact: it showcases practical in
     - No local runtime setup is required outside cluster tooling (`kubectl`/cluster access).
     - Then use the same `.gitlab-ci.yml` CI flow as Path A.
     - See `docs/GITLAB_SELF_MANAGED.md`.
+    - For cleanup, follow `docs/TEARDOWN.md`.
 - **Path B (manual in-cluster test run):**
     - Intended for local development/testing workflows.
     - Build training image yourself and run a one-off Kubernetes Job.
@@ -206,7 +207,8 @@ mlops-end-to-end-pipeline/
 └── docs/
     ├── ARCHITECTURE.md
     ├── SETUP.md
-    └── DEVELOPMENT.md
+    ├── DEVELOPMENT.md
+    └── TEARDOWN.md
 ```
 
 ## 🔄 Workflow
@@ -294,6 +296,15 @@ pytest models/ -v --cov=models/ --cov-report=term
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) - Detailed system design
 - [SETUP.md](docs/SETUP.md) - Installation & configuration
 - [DEVELOPMENT.md](docs/DEVELOPMENT.md) - Development workflow
+- [TEARDOWN.md](docs/TEARDOWN.md) - Step-by-step cluster and Minikube cleanup
+
+Quick teardown command:
+
+```bash
+make teardown-path-a2
+```
+
+This deletes Kubernetes resources and the temporary `path-a2-test` Minikube cluster profile only. It does not uninstall Minikube.
 
 ## 🤝 Contributing
 
