@@ -119,8 +119,8 @@ def train_model(X_train, X_test, y_train, y_test, scaler):
 
     with mlflow.start_run(description="Customer churn prediction model"):
         # Hyperparameters
-        n_estimators = 100
-        max_depth = 15
+        n_estimators = 150
+        max_depth = 20
         random_state = 42
 
         # Log parameters
