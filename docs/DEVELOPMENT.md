@@ -118,7 +118,163 @@ pytest models/ --cov=models/ --cov-report=html
 pytest models/test_pipeline.py -v
 ```
 
-## Git Workflow
+## Testing & CI/CD Validation
+
+### Local Unit Tests
+
+Run tests locally during development to catch issues before committing:
+
+```bash
+# Install test dependencies
+pip install -r models/requirements.txt pytest pytest-cov
+
+# Run all model tests
+pytest models/ -v
+
+# Run with coverage report
+pytest models/ --cov=models/ --cov-report=html --cov-report=term
+open htmlcov/index.html
+```
+
+### Validating the CI/CD Pipeline
+
+#### 1. Validate Pipeline Syntax Locally
+
+Before pushing, validate the `.gitlab-ci.yml` syntax:
+
+```bash
+# Check if you have a GitLab instance running
+# Using the API to lint the pipeline config
+TOKEN="glpat-your-admin-token"
+GITLAB_URL="http://localhost:8088"
+
+curl -X POST "$GITLAB_URL/api/v4/projects/2/ci/lint" \
+  -H "PRIVATE-TOKEN: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"content\": $(python3 -c "import json; print(json.dumps(open('.gitlab-ci.yml').read()))")}" \
+  | jq '{valid, errors, warnings}'
+```
+
+Or use the GitLab UI: Project → CI/CD → Pipelines → **CI Lint**.
+
+#### 2. Trigger a Real Pipeline
+
+The pipeline is automatically triggered on push to `main`. To manually trigger:
+
+```bash
+# Via GitLab Web UI
+# Go to: http://localhost:8088/root/mlops-e2e-github/-/pipelines
+# Click "Run pipeline" button
+
+# Or via GitLab API
+TOKEN="glpat-your-admin-token"
+GITLAB_URL="http://localhost:8088"
+PROJECT_ID=2
+
+curl -X POST "$GITLAB_URL/api/v4/projects/$PROJECT_ID/pipeline" \
+  -H "PRIVATE-TOKEN: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ref":"main"}' | jq '{id, status, web_url}'
+```
+
+#### 3. Watch Pipeline Execution
+
+```bash
+TOKEN="glpat-your-admin-token"
+GITLAB_URL="http://localhost:8088"
+PROJECT_ID=2
+PIPELINE_ID=5  # Replace with your pipeline ID
+
+# Get pipeline status
+curl -s "$GITLAB_URL/api/v4/projects/$PROJECT_ID/pipelines/$PIPELINE_ID" \
+  -H "PRIVATE-TOKEN: $TOKEN" | jq '{id, status, duration}'
+
+# Get all jobs in pipeline
+curl -s "$GITLAB_URL/api/v4/projects/$PROJECT_ID/pipelines/$PIPELINE_ID/jobs" \
+  -H "PRIVATE-TOKEN: $TOKEN" | jq '.[] | {name, status, stage, duration}'
+
+# Get logs for a specific job (job_id=16)
+curl -s "$GITLAB_URL/api/v4/projects/$PROJECT_ID/jobs/16/trace" \
+  -H "PRIVATE-TOKEN: $TOKEN" | tail -50
+```
+
+Or use the GitLab Web UI: Project → CI/CD → Pipelines → Pipeline #N → click job.
+
+#### 4. Verify CI Trigger Rules
+
+The pipeline uses `changes:` filters — verify they work correctly:
+
+**Test: Model change triggers pipeline**
+```bash
+# Edit a model file (e.g., `pipelines/train_pipeline.py`)
+# Bump a hyperparameter (n_estimators, max_depth, etc.)
+# Commit and push
+git add pipelines/train_pipeline.py
+git commit -m "model: tune hyperparameters"
+git push origin main
+
+# Pipeline SHOULD trigger with build, train, and test jobs
+# Check: http://localhost:8088/root/mlops-e2e-github/-/pipelines
+```
+
+**Test: Docs change does NOT trigger pipeline**
+```bash
+# Edit a docs file (e.g., `README.md` or `docs/DEVELOPMENT.md`)
+git add README.md
+git commit -m "docs: update readme"
+git push origin main
+
+# Pipeline SHOULD NOT trigger (no jobs created)
+# Check: http://localhost:8088/root/mlops-e2e-github/-/pipelines (no new entry)
+```
+
+**Test: Config change does NOT trigger pipeline**
+```bash
+# Edit a Kubernetes config or non-model file
+git add kubernetes/gitlab/02-gitlab.yaml
+git commit -m "infra: increase resources"
+git push origin main
+
+# Pipeline SHOULD NOT trigger (no jobs created)
+```
+
+#### 5. Check Pipeline Artifacts
+
+After a successful pipeline run, artifacts are available:
+
+```bash
+# Via GitLab UI
+# Go to: Project → CI/CD → Pipelines → Pipeline #N → job "train:model"
+# Scroll to "Job artifacts" → download mlruns.zip or metrics.json
+
+# Via API
+curl -s "$GITLAB_URL/api/v4/projects/$PROJECT_ID/pipelines/$PIPELINE_ID/jobs" \
+  -H "PRIVATE-TOKEN: $TOKEN" \
+  | jq '.[] | select(.name=="train:model") | .id'  # Get job ID
+
+# Download artifacts
+curl -L "$GITLAB_URL/api/v4/projects/$PROJECT_ID/jobs/JOB_ID/artifacts" \
+  -H "PRIVATE-TOKEN: $TOKEN" \
+  -o artifacts.zip
+```
+
+#### 6. Understanding Pipeline Stages
+
+| Stage | Jobs | When | Purpose |
+|-------|------|------|---------|
+| **build** | `build:training`, `build:serving` | When Docker files or model code changes | Build Docker images |
+| **train** | `train:model` | On schedule or when model/pipeline code changes | Train ML model with MLflow |
+| **test** | `test:model`, `test:inference` | When model code or PRs involve model changes | Run pytest, validate model quality |
+| **deploy** | `deploy:kserve`, `deploy:staging` | Manual trigger (disabled by default) | Deploy to KServe or staging |
+| **monitor** | `monitor:inference`, `monitor:mlflow` | Manual trigger (disabled by default) | Health checks and monitoring |
+
+**Expected timeline for a full pipeline run:**
+- Build stage: ~2-3 minutes (Docker builds)
+- Train stage: ~1-2 minutes (RandomForest training)
+- Test stage: ~30-60 seconds (pytest runs)
+- **Total: ~4-6 minutes**
+
+
 
 ### Branch Strategy
 
