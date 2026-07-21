@@ -94,7 +94,7 @@ If not already installed on your cluster, install KServe:
 
 ```bash
 # Install KServe operator
-kubectl apply -f https://github.com/kserve/kserve/releases/download/v0.11.0/kserve.yaml
+kubectl apply -f https://github.com/kserve/kserve/releases/download/v0.19.0/kserve.yaml
 
 # Wait for KServe operator to be ready
 kubectl wait --for=condition=Progressing=True deployment -l control-plane=kserve-controller-manager -n kserve --timeout=300s

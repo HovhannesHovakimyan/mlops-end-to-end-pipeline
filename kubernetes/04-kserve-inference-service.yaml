@@ -1,12 +1,40 @@
 # KServe InferenceService for model serving
 # This deploys a trained model for inference with canary rollout strategy
+---
+# S3 credentials for KServe storage-initializer to pull models from MinIO
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-s3-secret
+  namespace: kserve
+  annotations:
+    serving.kserve.io/s3-endpoint: minio.minio:9000
+    serving.kserve.io/s3-usehttps: "0"
+    serving.kserve.io/s3-verifyssl: "0"
+    serving.kserve.io/s3-region: us-east-1
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: minioadmin
+  AWS_SECRET_ACCESS_KEY: minioadmin
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kserve-sa
+  namespace: kserve
+secrets:
+- name: minio-s3-secret
+---
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
   name: churn-predictor
   namespace: kserve
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
 spec:
   predictor:
+    serviceAccountName: kserve-sa
     model:
       modelFormat:
         name: sklearn
@@ -19,8 +47,6 @@ spec:
         limits:
           cpu: "500m"
           memory: "1Gi"
-  # Canary deployment: 90% current, 10% candidate
-  canaryTrafficPercent: 10
 ---
 # Service for KServe predictor
 apiVersion: v1

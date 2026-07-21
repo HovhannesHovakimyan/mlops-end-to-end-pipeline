@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -8,7 +9,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 5Gi
+      storage: 10Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -20,7 +21,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 5Gi
+      storage: 10Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -32,7 +33,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 20Gi
+      storage: 40Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -54,7 +55,7 @@ spec:
     spec:
       containers:
         - name: gitlab
-          image: gitlab/gitlab-ce:17.2.1-ce.0
+          image: gitlab/gitlab-ce:19.2.0-ce.0
           imagePullPolicy: IfNotPresent
           env:
             - name: GITLAB_OMNIBUS_CONFIG
@@ -103,11 +104,11 @@ spec:
             failureThreshold: 10
           resources:
             requests:
-              cpu: "750m"
-              memory: "3Gi"
+              cpu: "1000m"
+              memory: "4Gi"
             limits:
-              cpu: "2000m"
-              memory: "5Gi"
+              cpu: "2500m"
+              memory: "6Gi"
           volumeMounts:
             - name: config
               mountPath: /etc/gitlab

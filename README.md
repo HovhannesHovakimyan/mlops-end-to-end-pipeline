@@ -111,9 +111,10 @@ Quick links:
     - Deploy GitLab CE + GitLab Runner from `kubernetes/gitlab/` manifests.
     - All required CI infrastructure for this path runs inside the Kubernetes cluster.
     - No local runtime setup is required outside cluster tooling (`kubectl`/cluster access).
+    - **Runner provisioning (recommended): Use API-based automation** via `06-runner-provisioner.sh` script or Kubernetes Job — fully automated, no manual UI steps.
     - Then use the same `.gitlab-ci.yml` CI flow as Path A.
     - For deploy/monitor CI guidance, see [Section 8](#deploy-monitoring-jobs).
-    - See `docs/GITLAB_SELF_MANAGED.md`.
+    - See `docs/GITLAB_SELF_MANAGED.md` for setup instructions and provisioning options.
     - For cleanup, follow `docs/TEARDOWN.md`.
 - **Path B (manual in-cluster test run):**
     - Intended for local development/testing workflows.
@@ -126,6 +127,16 @@ Quick links:
 - Kubernetes cluster (v1.24+) and `kubectl` connected
 - Docker (only if you build images locally)
 - Git
+
+### ⚠️ Path A2 Users: GitLab Setup Required First
+
+If you plan to use **Path A2 (self-managed GitLab in your cluster)**, complete the GitLab + runner deployment **before** proceeding past Section 2:
+
+→ **[Follow `docs/GITLAB_SELF_MANAGED.md` now](docs/GITLAB_SELF_MANAGED.md)**
+
+This deploys GitLab CE and GitLab Runner into your cluster, which you'll need for the training pipeline in Section 4.
+
+---
 
 ### 1. Clone repository
 
@@ -236,7 +247,9 @@ docker build -f docker/Dockerfile.training -t mlops-sanity-training:latest .
 <a id="run-training-in-kubernetes"></a>
 ### 4. Run training in Kubernetes
 
-Path B only.
+**Path A / A2:** Training is triggered automatically by the GitLab CI pipeline when you push to `main`. The `train` stage in `.gitlab-ci.yml` runs the training job inside the cluster and uploads the model to MinIO. No manual steps are needed here — push your code and the pipeline handles it.
+
+**Path B only (manual run):**
 
 ```bash
 kubectl delete job sanity-train -n default --ignore-not-found
@@ -303,13 +316,81 @@ python pipelines/train_pipeline.py
 
 ### 7. Optional: deploy inference service to KServe
 
+KServe supports two deployment modes. Choose based on your environment:
+
+| | RawDeployment | Knative (Serverless) |
+|---|---|---|
+| **Scale to zero** | No | Yes |
+| **Autoscaling** | HPA (CPU/memory) | KPA (request-driven) |
+| **Traffic splitting / canary** | Via InferenceGraph | Native |
+| **Extra dependencies** | None | Knative Serving + Istio or Kourier |
+| **Resource overhead** | Low | ~3–4 GB extra RAM |
+| **Recommended for** | Dev, local, resource-constrained clusters | Production, GPU cost optimisation |
+
+#### Option A: RawDeployment (recommended for Minikube / local)
+
 ```bash
-# install KServe if not already installed
-kubectl apply -f https://github.com/kserve/kserve/releases/download/v0.11.0/kserve.yaml
+# install cert-manager (required by KServe for TLS)
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+kubectl wait --for=condition=available --timeout=120s deployment/cert-manager -n cert-manager
+kubectl wait --for=condition=available --timeout=120s deployment/cert-manager-webhook -n cert-manager
+
+# install KServe — server-side apply is required (avoids annotation size limit on large CRDs)
+kubectl apply --server-side -f https://github.com/kserve/kserve/releases/download/v0.19.0/kserve.yaml
+kubectl wait --for=condition=available --timeout=120s deployment/kserve-controller-manager -n kserve
+
+# install KServe serving runtimes (sklearn, xgboost, tensorflow, etc. — shipped separately)
+kubectl apply --server-side -f https://github.com/kserve/kserve/releases/download/v0.19.0/kserve-cluster-resources.yaml
+
+# disable Istio virtual host (not needed for RawDeployment)
+kubectl patch configmap inferenceservice-config -n kserve --type=merge \
+  -p '{"data":{"ingress":"{\"enableGatewayApi\":false,\"kserveIngressGateway\":\"kserve/kserve-ingress-gateway\",\"ingressGateway\":\"knative-serving/knative-ingress-gateway\",\"localGateway\":\"knative-serving/knative-local-gateway\",\"localGatewayService\":\"knative-local-gateway.istio-system.svc.cluster.local\",\"ingressDomain\":\"example.com\",\"ingressClassName\":\"istio\",\"domainTemplate\":\"{{ .Name }}-{{ .Namespace }}.{{ .IngressDomain }}\",\"urlScheme\":\"http\",\"disableIstioVirtualHost\":true,\"disableIngressCreation\":true,\"disableHTTPRouteTimeout\":false}"}}'
+
+# install Prometheus Operator (required for ServiceMonitor CRDs)
+kubectl apply --server-side -f https://github.com/prometheus-operator/prometheus-operator/releases/latest/download/bundle.yaml
+kubectl wait --for=condition=available --timeout=120s deployment/prometheus-operator -n default
 
 kubectl apply -f kubernetes/04-kserve-inference-service.yaml
 kubectl get inferenceservice -n kserve
 ```
+
+#### Option B: Knative Serverless (production-grade, requires ~8 GB+ RAM)
+
+```bash
+# install cert-manager (required by KServe for TLS)
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+kubectl wait --for=condition=available --timeout=120s deployment/cert-manager -n cert-manager
+kubectl wait --for=condition=available --timeout=120s deployment/cert-manager-webhook -n cert-manager
+
+# install Knative Serving
+kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-crds.yaml
+kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-core.yaml
+
+# install Kourier as the networking layer (lighter than Istio)
+kubectl apply -f https://github.com/knative/net-kourier/releases/latest/download/kourier.yaml
+kubectl patch configmap/config-network -n knative-serving \
+  --type merge -p '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'
+kubectl wait --for=condition=available --timeout=180s deployment/net-kourier-controller -n kourier-system
+
+# install KServe — server-side apply is required (avoids annotation size limit on large CRDs)
+kubectl apply --server-side -f https://github.com/kserve/kserve/releases/download/v0.19.0/kserve.yaml
+kubectl wait --for=condition=available --timeout=120s deployment/kserve-controller-manager -n kserve
+
+# install KServe serving runtimes (sklearn, xgboost, tensorflow, etc. — shipped separately)
+kubectl apply --server-side -f https://github.com/kserve/kserve/releases/download/v0.19.0/kserve-cluster-resources.yaml
+
+# install Prometheus Operator (required for ServiceMonitor CRDs)
+kubectl apply --server-side -f https://github.com/prometheus-operator/prometheus-operator/releases/latest/download/bundle.yaml
+kubectl wait --for=condition=available --timeout=120s deployment/prometheus-operator -n default
+
+# remove the RawDeployment annotation from the InferenceService before applying
+# (edit kubernetes/04-kserve-inference-service.yaml and delete the
+#  serving.kserve.io/deploymentMode: RawDeployment annotation line)
+kubectl apply -f kubernetes/04-kserve-inference-service.yaml
+kubectl get inferenceservice -n kserve
+```
+
+> **Note:** The InferenceService will stay in a non-Ready state until the training pipeline (step 4) has run and uploaded the model to MinIO at `s3://model-registry/churn-model/latest/model.pkl`. This is expected — once the model is present, KServe will automatically load it and the service will become Ready.
 
 <a id="deploy-monitoring-jobs"></a>
 ### 8. Deploy and monitoring jobs in GitLab CI (optional)

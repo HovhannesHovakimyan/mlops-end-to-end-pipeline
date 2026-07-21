@@ -44,9 +44,12 @@ build:training:
       else
         echo "REGISTRY_USER/REGISTRY_PASSWORD not set; skipping image push for local Path A2 run."
       fi
-  only:
-    - main
-    - /^release-.*$/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^release-/'
+      changes:
+        - docker/Dockerfile.training
+        - models/**/*
+        - pipelines/**/*
   tags:
     - docker
 
@@ -70,9 +73,12 @@ build:serving:
       else
         echo "REGISTRY_USER/REGISTRY_PASSWORD not set; skipping image push for local Path A2 run."
       fi
-  only:
-    - main
-    - /^release-.*$/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^release-/'
+      changes:
+        - docker/Dockerfile.serving
+        - models/**/*
+        - pipelines/**/*
   tags:
     - docker
 
@@ -120,9 +126,12 @@ train:model:
       - mlruns/
       - metrics.json
     expire_in: 30 days
-  only:
-    - main
-    - schedules  # For scheduled retraining
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - models/**/*
+        - pipelines/**/*
   tags:
     - kubernetes
   retry:
@@ -150,9 +159,14 @@ test:model:
         path: coverage.xml
     paths:
       - htmlcov/
-  only:
-    - main
-    - merge_requests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - models/**/*
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - models/**/*
+        - pipelines/**/*
   tags:
     - kubernetes
 
@@ -165,9 +179,14 @@ test:inference:
     - echo "Testing inference service..."
     - pip install --no-cache-dir -r models/requirements.txt pytest
     - python -m pytest models/test_pipeline.py -v -k "Inference"
-  only:
-    - main
-    - merge_requests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - models/**/*
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - models/**/*
+        - pipelines/**/*
   tags:
     - kubernetes
 
