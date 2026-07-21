@@ -1,0 +1,37 @@
+# Static PV examples for single-node clusters without dynamic provisioning.
+# Suitable for lab/dev only. Update host paths if needed.
+# Apply before 02-minio.yaml and 03-mlflow.yaml.
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /var/lib/mlops-pv/minio
+  claimRef:
+    namespace: minio
+    name: minio-pvc
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mlflow-pv
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /var/lib/mlops-pv/mlflow
+  claimRef:
+    namespace: mlflow
+    name: mlflow-pvc

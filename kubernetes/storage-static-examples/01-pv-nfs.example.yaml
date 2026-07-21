@@ -1,0 +1,39 @@
+# Static PV examples using NFS for clusters without dynamic provisioning.
+# Edit NFS server/path values before apply.
+# Apply before 02-minio.yaml and 03-mlflow.yaml.
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 10.0.0.10
+    path: /exports/mlops/minio
+  claimRef:
+    namespace: minio
+    name: minio-pvc
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mlflow-pv
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 10.0.0.10
+    path: /exports/mlops/mlflow
+  claimRef:
+    namespace: mlflow
+    name: mlflow-pvc

@@ -172,6 +172,11 @@ kubectl apply -f kubernetes/01-namespaces.yaml
 kubectl apply -f kubernetes/02-minio.yaml
 kubectl apply -f kubernetes/03-mlflow.yaml
 
+# optional: static PV profile for clusters without dynamic provisioning
+# (use this before 02-minio.yaml and 03-mlflow.yaml if PVCs stay Pending)
+# kubectl apply -f kubernetes/storage-static-examples/00-pv-hostpath-single-node.example.yaml
+# or edit/apply kubernetes/storage-static-examples/01-pv-nfs.example.yaml
+
 # wait for core services
 kubectl wait --for=condition=available --timeout=300s deployment/minio -n minio
 kubectl wait --for=condition=available --timeout=300s deployment/mlflow -n mlflow
@@ -181,6 +186,38 @@ kubectl exec -n minio deployment/minio -- mc alias set local http://minio.minio:
 kubectl exec -n minio deployment/minio -- mc mb -p local/training-data
 kubectl exec -n minio deployment/minio -- mc mb -p local/model-registry
 kubectl exec -n minio deployment/minio -- mc mb -p local/mlflow-artifacts
+```
+
+If MinIO or MLflow does not start, check PVC/PV binding first.
+
+### Troubleshooting: PVC Pending
+
+Run these checks:
+
+```bash
+kubectl get pvc -n minio
+kubectl get pvc -n mlflow
+kubectl get pv
+kubectl get storageclass
+kubectl describe pvc minio-pvc -n minio
+kubectl describe pvc mlflow-pvc -n mlflow
+```
+
+How to interpret:
+
+- If PVC is `Bound`: storage is fine. Check pod events/logs next.
+- If PVC is `Pending` and there is no default StorageClass: use static PV profile from `kubernetes/storage-static-examples/`.
+- If PVC is `Pending` and a default StorageClass exists: check StorageClass provisioner health and cluster events.
+
+Apply static profile (optional path):
+
+```bash
+kubectl apply -f kubernetes/storage-static-examples/00-pv-hostpath-single-node.example.yaml
+# or (after editing NFS values)
+kubectl apply -f kubernetes/storage-static-examples/01-pv-nfs.example.yaml
+
+kubectl apply -f kubernetes/02-minio.yaml
+kubectl apply -f kubernetes/03-mlflow.yaml
 ```
 
 If you use **Path A (existing GitLab CI/CD)**, continue with GitLab mirror/pipeline setup and skip to optional UI or inference steps.
