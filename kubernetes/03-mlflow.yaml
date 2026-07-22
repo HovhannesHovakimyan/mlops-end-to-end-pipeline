@@ -40,7 +40,7 @@ spec:
     spec:
       containers:
       - name: mlflow
-        image: ghcr.io/mlflow/mlflow:v2.14.3
+        image: ghcr.io/mlflow/mlflow:v3.14.0
         command:
           - /bin/sh
           - -c
@@ -76,30 +76,18 @@ spec:
             memory: "2Gi"
             cpu: "2000m"
         startupProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 5000
-            httpHeaders:
-            - name: Host
-              value: mlflow.mlflow
           failureThreshold: 60
           periodSeconds: 5
         livenessProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 5000
-            httpHeaders:
-            - name: Host
-              value: mlflow.mlflow
           initialDelaySeconds: 10
           periodSeconds: 20
         readinessProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 5000
-            httpHeaders:
-            - name: Host
-              value: mlflow.mlflow
           initialDelaySeconds: 10
           periodSeconds: 5
       volumes:
